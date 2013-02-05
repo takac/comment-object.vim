@@ -38,59 +38,121 @@ function! SelectComment()
 		let comment_start = '\v^\s*(' . escape(s:CommenterDelims['left'], '/*') . ')'
 		let comment_regex = comment_start
 	else
-		let comment_regex = '^\s*\('
-		for i in ['leftAlt', 'right', 'mid']
+		let comment_regex = '\v^\s*('
+		for i in ['leftAlt', 'rightAlt', 'mid']
 			if has_key(s:CommenterDelims, i)
-				let comment_regex = comment_regex . escape(s:CommenterDelims[i], '/*') . '\|'
+				let comment_regex = comment_regex . escape(s:CommenterDelims[i], '/*') . '|'
 			endif
 		endfor
-	let comment_regex = comment_regex[:-3] . '\)'
+	let comment_regex = comment_regex[:-2] . ')'
 	endif
-	
-	while match(getline(line(".+1")), '\*') != -1
+
+	while getline(line(".") - 1) =~ comment_regex 
 		normal k
 	endwhile
 
 	" start selecting
-	normal V6j
-		
+	normal V
+	
 	" find the last commented line
+	while line(".") < line("$") && getline(line(".") + 1) =~ comment_regex
+	 	normal j
+	endwhile
 endfunction
 
-function! SelectInnerComment()
+function! SelectInnerComment(visual)
 
-	" TODO: What happens if a , or : is used in a comment-indicator?
-	let comment_indicators=map(split(&com, ","),	'split(v:val, ":")[-1]')
+	let start_pos = getpos(".")
 
-	" Creates a regular expression that matches y line that starts with a
-	" comment indicator.
-	"
-	" TODO: Handle the "f" flag and the "b" flag.
-	let comment_regex= '^\s*' . s:CommenterDelims['left']
+	let comment_inline = '\/\/'
+	let comment_start = '\/\*'
+	let comment_end = '\*\/\s*$'
 
-	" bail if not a comment
-	if match(getline("."), comment_regex) == -1
-		return 
+	if(a:visual)
+		normal! gv
+	else 
+		normal! v
 	endif
 
-	" find the first commented line
-	while line(".") - 1 && match(getline(line(".") - 1), comment_regex) > -1
-		normal k
-	endwhile
+	let comment_type = 0
+	let comment_line_start = ''
+	let comment_line_end = ''
 
-	" start selecting
-	normal ^2lv$h
+	if getline(".") =~ comment_inline
+		normal! g^
+		call search(comment_inline . '\zs')
+		let comment_type = 0
+	else
+		let comment_type = 1
+		normal! g^
+	endif
 
-	" find the last commented line
-	while line(".") < line("$") &&	match(getline(line(".") + 1), comment_regex) > -1
-		normal j$h
-	endwhile
+	if comment_type
+		if getline(".") !~ comment_start
+			while getline(line(".")) !~ comment_start
+				if getline(line(".")-1) =~ comment_end
+					call setpos(".",start_pos)
+					return 
+				endif
+				normal! k
+			endwhile
+			let comment_line_start = line(".") 
+			normal! ^3l
+		else
+			if getline(".") =~ comment_end
+				normal! 3l
+			else
+				normal! 3l
+			endif
+		endif
+	else
+		while getline(line(".")-1) =~ comment_inline
+			normal! k
+		endwhile
+		normal! g^
+		call search(comment_inline . '\zs')
+	endif
+
+	normal! o
+
+	
+	if comment_type
+		if getline(".") !~ comment_end
+			while getline(line(".")) !~ comment_end
+				normal! j
+			endwhile
+			let comment_line_end = line(".") 
+		else
+			if getline(".") =~ comment_start
+				echom "do noth"
+			else
+				echo "noenA"
+			endif
+		endif
+	else
+		while getline(line(".")+1) =~ comment_inline
+			normal! j
+		endwhile
+	endif
+	
+	if comment_type
+		if line(".") == comment_line_start
+			if line(".") == comment_line_end
+				echom "do nothing"
+			endif
+		else
+			normal! $3h
+		endif
+		if comment_line_start < comment_line_end - 3
+		endif
+	else
+		normal! $h
+	endif
+
 endfunction
 
 vnoremap ac :<C-U> call SelectComment()<CR>
 omap ac :normal vac<CR>
 
-" TODO: In the case that a comment has different start and end delimeters from
-" its extension character, we should exclude those lines.
-vnoremap ic :<C-U> call SelectInnerComment()<CR>
-omap ic :normal vic<CR>
+vnoremap ic :<C-U> call SelectInnerComment(1)<CR>
+omap ic :call SelectInnerComment(0)<CR>
